@@ -1,0 +1,264 @@
+{
+  "info": {
+    "_postman_id": "d0bc6c1a-5e39-4d31-8e7a-6ad050f5ea31",
+    "name": "EventEase - 14 Core API Tests",
+    "description": "Send requests 01-14 one at a time and in order. Each request description explains the steps, expected result, and screenshot name.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000" },
+    { "key": "runId", "value": "" },
+    { "key": "eventDate", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "userToken", "value": "" },
+    { "key": "eventId", "value": "" },
+    { "key": "regId", "value": "" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.collectionVariables.set('eventDate', new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString());"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const name = pm.info.requestName;",
+          "const expected = {",
+          "  '01 Register Admin': 201, '02 Register User': 201, '03 Login Admin': 200, '04 Login User': 200,",
+          "  '05 Admin creates event': 201, '06 Get upcoming events': 200, '07 User cannot create event': 403,",
+          "  '08 Create event without token': 401, '09 Too many seats': 400, '10 Register for event': 201,",
+          "  '11 Duplicate registration': 409, '12 Get my registrations': 200, '13 Cancel registration': 200,",
+          "  '14 Verify restored seats': 200",
+          "};",
+          "pm.test('Expected HTTP status ' + expected[name], function () { pm.response.to.have.status(expected[name]); });",
+          "let data = {};",
+          "try { data = pm.response.json(); } catch (error) { data = {}; }",
+          "if (name === '03 Login Admin' && data.token) pm.collectionVariables.set('adminToken', data.token);",
+          "if (name === '04 Login User' && data.token) pm.collectionVariables.set('userToken', data.token);",
+          "if (name === '05 Admin creates event' && data.event && data.event._id) pm.collectionVariables.set('eventId', data.event._id);",
+          "if (name === '10 Register for event' && data.registration && data.registration._id) pm.collectionVariables.set('regId', data.registration._id);",
+          "if (name === '12 Get my registrations' && data.registrations && data.registrations.length) pm.collectionVariables.set('regId', data.registrations[0]._id);",
+          "if (name === '01 Register Admin') pm.test('Admin account was created', function () { pm.expect(data.user.role).to.eql('Admin'); });",
+          "if (name === '02 Register User') pm.test('Normal user account was created', function () { pm.expect(data.user.role).to.eql('User'); });",
+          "if (name === '05 Admin creates event') pm.test('Event has five available seats', function () { pm.expect(data.event.availableSeats).to.eql(5); });",
+          "if (name === '06 Get upcoming events') pm.test('The new event appears in the list', function () { pm.expect(data.events.some(function (event) { return event._id === pm.collectionVariables.get('eventId'); })).to.eql(true); });",
+          "if (name === '07 User cannot create event') pm.test('Access is denied to a normal user', function () { pm.expect(data.message).to.eql('Only admin can do this'); });",
+          "if (name === '08 Create event without token') pm.test('Missing token is rejected', function () { pm.expect(data.message).to.eql('No token, access denied'); });",
+          "if (name === '09 Too many seats') pm.test('Insufficient seats are reported', function () { pm.expect(data.message).to.include('Only 5 seats available'); });",
+          "if (name === '10 Register for event') pm.test('Two seats are booked and three remain', function () { pm.expect(data.availableSeatsNow).to.eql(3); pm.expect(data.registration.totalAmount).to.eql(200); });",
+          "if (name === '11 Duplicate registration') pm.test('Duplicate registration is rejected', function () { pm.expect(data.message).to.eql('You already registered for this event'); });",
+          "if (name === '12 Get my registrations') pm.test('The user sees their confirmed registration', function () { pm.expect(data.count).to.eql(1); pm.expect(data.registrations[0].registrationStatus).to.eql('Confirmed'); });",
+          "if (name === '13 Cancel registration') pm.test('Cancellation restores five seats', function () { pm.expect(data.registration.registrationStatus).to.eql('Cancelled'); pm.expect(data.availableSeatsNow).to.eql(5); });",
+          "if (name === '14 Verify restored seats') pm.test('Event now has five available seats', function () { pm.expect(data.event.availableSeats).to.eql(5); });"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Register Admin",
+      "description": "STEP: Click Send.\nMETHOD: POST\nURL: {{baseUrl}}/api/auth/register\nBODY: Admin name, unique test email, password, and role Admin.\nEXPECTED: 201 Created; response user.role is Admin.\nSCREENSHOT: 01_register_admin.png (show URL, Body, response, and status).",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.collectionVariables.set('runId', Date.now().toString());"]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\":\"Admin\",\"email\":\"admin-{{runId}}@test.com\",\"password\":\"123456\",\"role\":\"Admin\"}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/auth/register"
+      }
+    },
+    {
+      "name": "02 Register User",
+      "description": "STEP: Click Send.\nMETHOD: POST\nURL: {{baseUrl}}/api/auth/register\nBODY: Normal user name, email, and password. The email uses the same unique run ID as Test 01.\nEXPECTED: 201 Created; response user.role is User.\nSCREENSHOT: 02_register_user.png (show URL, Body, response, and status).",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\":\"Rahul\",\"email\":\"rahul-{{runId}}@test.com\",\"password\":\"123456\"}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/auth/register"
+      }
+    },
+    {
+      "name": "03 Login Admin",
+      "description": "STEP: Click Send. The collection saves the returned JWT as adminToken.\nMETHOD: POST\nURL: {{baseUrl}}/api/auth/login\nBODY: Admin email and password from Test 01.\nEXPECTED: 200 OK; response contains a token and user.role Admin.\nSCREENSHOT: 03_login_admin.png (show URL, Body, response, and status).",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\":\"admin-{{runId}}@test.com\",\"password\":\"123456\"}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/auth/login"
+      }
+    },
+    {
+      "name": "04 Login User",
+      "description": "STEP: Click Send. The collection saves the returned JWT as userToken.\nMETHOD: POST\nURL: {{baseUrl}}/api/auth/login\nBODY: User email and password from Test 02.\nEXPECTED: 200 OK; response contains a token and user.role User.\nSCREENSHOT: 04_login_user.png (show URL, Body, response, and status).",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\":\"rahul-{{runId}}@test.com\",\"password\":\"123456\"}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/auth/login"
+      }
+    },
+    {
+      "name": "05 Admin creates event",
+      "description": "STEP: Click Send. The admin token is added automatically; the event ID is saved for later requests.\nMETHOD: POST\nURL: {{baseUrl}}/api/events\nAUTH: Bearer {{adminToken}}\nBODY: Tech Fest with a future date, five seats, and fee 100.\nEXPECTED: 201 Created; availableSeats is 5.\nSCREENSHOT: 05_admin_create_event.png (show URL, Body, response, and status).",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"eventName\":\"Tech Fest\",\"description\":\"Annual technology fest\",\"category\":\"Technology\",\"eventDate\":\"{{eventDate}}\",\"venue\":\"Main Hall\",\"totalSeats\":5,\"registrationFee\":100}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/events"
+      }
+    },
+    {
+      "name": "06 Get upcoming events",
+      "description": "STEP: Click Send.\nMETHOD: GET\nURL: {{baseUrl}}/api/events?search=tech&category=Technology&page=1&limit=5\nEXPECTED: 200 OK; events array includes the event created in Test 05.\nSCREENSHOT: 06_get_events.png (show full URL/Params, response, and status).",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/events?search=tech&category=Technology&page=1&limit=5"
+      }
+    },
+    {
+      "name": "07 User cannot create event",
+      "description": "STEP: Click Send. The normal-user token is added automatically.\nMETHOD: POST\nURL: {{baseUrl}}/api/events\nAUTH: Bearer {{userToken}}\nBODY: Event JSON (the request should be denied before event creation).\nEXPECTED: 403 Forbidden; message is Only admin can do this.\nSCREENSHOT: 07_user_forbidden.png (show URL, Body, Authorization, response, and status).",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"eventName\":\"User Event\",\"description\":\"Should be denied\",\"category\":\"Technology\",\"eventDate\":\"{{eventDate}}\",\"venue\":\"Main Hall\",\"totalSeats\":5,\"registrationFee\":100}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/events"
+      }
+    },
+    {
+      "name": "08 Create event without token",
+      "description": "STEP: Click Send. Do not add an Authorization header.\nMETHOD: POST\nURL: {{baseUrl}}/api/events\nBODY: Event JSON.\nEXPECTED: 401 Unauthorized; message is No token, access denied.\nSCREENSHOT: 08_no_token.png (show URL, Body, that no Authorization header is sent, response, and status).",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"eventName\":\"No Token Event\",\"description\":\"Should be denied\",\"category\":\"Technology\",\"eventDate\":\"{{eventDate}}\",\"venue\":\"Main Hall\",\"totalSeats\":5,\"registrationFee\":100}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/events"
+      }
+    },
+    {
+      "name": "09 Too many seats",
+      "description": "STEP: Click Send. The normal-user token and event ID are added automatically.\nMETHOD: POST\nURL: {{baseUrl}}/api/registrations\nAUTH: Bearer {{userToken}}\nBODY: eventId {{eventId}}, numberOfSeats 10.\nEXPECTED: 400 Bad Request; message says only five seats are available. No seats should be changed.\nSCREENSHOT: 09_insufficient_seats.png (show URL, Body, response, and status).",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"eventId\":\"{{eventId}}\",\"numberOfSeats\":10}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/registrations"
+      }
+    },
+    {
+      "name": "10 Register for event",
+      "description": "STEP: Click Send. The normal-user token and event ID are added automatically.\nMETHOD: POST\nURL: {{baseUrl}}/api/registrations\nAUTH: Bearer {{userToken}}\nBODY: eventId {{eventId}}, numberOfSeats 2.\nEXPECTED: 201 Created; totalAmount is 200 and availableSeatsNow is 3.\nSCREENSHOT: 10_register_event.png (show URL, Body, response, and status).",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"eventId\":\"{{eventId}}\",\"numberOfSeats\":2}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/registrations"
+      }
+    },
+    {
+      "name": "11 Duplicate registration",
+      "description": "STEP: Click Send again with the same user and event.\nMETHOD: POST\nURL: {{baseUrl}}/api/registrations\nAUTH: Bearer {{userToken}}\nBODY: eventId {{eventId}}, numberOfSeats 1.\nEXPECTED: 409 Conflict; message is You already registered for this event.\nSCREENSHOT: 11_duplicate_registration.png (show URL, Body, response, and status).",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{userToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"eventId\":\"{{eventId}}\",\"numberOfSeats\":1}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": "{{baseUrl}}/api/registrations"
+      }
+    },
+    {
+      "name": "12 Get my registrations",
+      "description": "STEP: Click Send. The registration ID is saved automatically for cancellation.\nMETHOD: GET\nURL: {{baseUrl}}/api/registrations/my\nAUTH: Bearer {{userToken}}\nEXPECTED: 200 OK; count is 1 and registrationStatus is Confirmed.\nSCREENSHOT: 12_my_registrations.png (show URL, Authorization, response, and status).",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+        "url": "{{baseUrl}}/api/registrations/my"
+      }
+    },
+    {
+      "name": "13 Cancel registration",
+      "description": "STEP: Click Send. The user token and registration ID are added automatically.\nMETHOD: PUT\nURL: {{baseUrl}}/api/registrations/{{regId}}/cancel\nAUTH: Bearer {{userToken}}\nEXPECTED: 200 OK; registrationStatus is Cancelled and availableSeatsNow is 5.\nSCREENSHOT: 13_cancel_registration.png (show URL, Authorization, response, and status).",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+        "url": "{{baseUrl}}/api/registrations/{{regId}}/cancel"
+      }
+    },
+    {
+      "name": "14 Verify restored seats",
+      "description": "STEP: Click Send.\nMETHOD: GET\nURL: {{baseUrl}}/api/events/{{eventId}}\nEXPECTED: 200 OK; event.availableSeats is 5 again.\nSCREENSHOT: 14_seats_restored.png (show URL, response, and status).",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/events/{{eventId}}"
+      }
+    }
+  ]
+}
